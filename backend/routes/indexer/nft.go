@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
@@ -134,12 +135,54 @@ func processNFTMintedEvent(event IndexerEvent) {
 		PrintIndexerError("processNFTMintedEvent", "Error encoding image", tokenIdLowHex, positionHex, widthHex, heightHex, imageHashHex, blockNumberHex, minter)
 		return
 	}
+	// Create a NFT JSON metadata file
+
+	x := position % int64(core.ArtPeaceBackend.CanvasConfig.Canvas.Width)
+	y := position / int64(core.ArtPeaceBackend.CanvasConfig.Canvas.Width)
+	minterAddress := minter
+	metadata := map[string]interface{}{
+		"name":        fmt.Sprintf("NFT #%d", tokenId),
+		"description": "This is an NFT minted on the blockchain.",
+		"image":       fmt.Sprintf("http://localhost:3000/nft-images/nft-%d.png", tokenId),
+		"attributes": []map[string]interface{}{
+			{
+				"trait_type": "Width",
+				"value":      fmt.Sprintf("%d", width),
+			},
+			{
+				"trait_type": "Height",
+				"value":      fmt.Sprintf("%d", height),
+			},
+			{
+				"trait_type": "Position",
+				"value":      fmt.Sprintf("(%d, %d)", x, y),
+			},
+			{
+				"trait_type": "Minter",
+				"value":      minterAddress,
+			},
+		},
+	}
+
+	metadataFile, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		PrintIndexerError("processNFTMintedEvent", "Error generating NFT metadata", tokenIdLowHex, positionHex, widthHex, heightHex, imageHashHex, blockNumberHex, minter)
+		return
+	}
+
+	metadataFilename := fmt.Sprintf("nfts/nft-%d.json", tokenId)
+	err = os.WriteFile(metadataFilename, metadataFile, 0644)
+	if err != nil {
+		PrintIndexerError("processNFTMintedEvent", "Error writing NFT metadata file", tokenIdLowHex, positionHex, widthHex, heightHex, imageHashHex, blockNumberHex, minter)
+		return
+	}
 
 	message := map[string]interface{}{
 		"token_id":    tokenId,
 		"minter":      minter,
 		"messageType": "nftMinted",
 	}
+
 	routeutils.SendWebSocketMessage(message)
 
 	// TODO: Response?
